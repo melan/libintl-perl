@@ -361,8 +361,14 @@ sub dcnpgettext($$$$$$)
 	my $domain;
 	my $found;
 	foreach my $this_domain (@$domains) {
-		if ($this_domain && defined $this_domain->{messages}->{$msg_ctxt_id}) {
-			@trans = @{$this_domain->{messages}->{$msg_ctxt_id}};
+		if ($this_domain && (
+        defined $msgctxt && defined $this_domain->{messages}->{$msg_ctxt_id} ||
+        defined $this_domain->{messages}->{$msgid} 
+        ) ) {
+			@trans = defined $msgctxt && defined $this_domain->{messages}->{$msg_ctxt_id} ? 
+        @{$this_domain->{messages}->{$msg_ctxt_id}} :
+        @{$this_domain->{messages}->{$msgid}} ;
+        
 			shift @trans;
 			$domain = $this_domain;
 			$found = 1;
@@ -493,11 +499,11 @@ sub __load_domain
 
 	# Have we looked that one up already?
 	my $domains = $__gettext_pp_domain_cache->{$dir}->{$cache_key}->{$category_name}->{$domainname};
-	
+
 	if (@locales && !defined $domains) {
 		my @dirs = ($dir);
-		my @tries = (@locales);
-		my %locale_lookup = map { $_ => $_ } @tries;
+		my @tries = ();
+		my %locale_lookup = ();
 
 		foreach my $locale (@locales) {
 			if ($locale =~ /^([a-z][a-z])
@@ -521,14 +527,19 @@ sub __load_domain
 			}
 		}
 
+    unless (scalar @tries) {
+      @tries = (@locales);
+      %locale_lookup = map { $_ => $_ } @tries;
+    }
+
 		push @dirs, $__gettext_pp_default_dir
 			if $__gettext_pp_default_dir && $dir ne $__gettext_pp_default_dir;
 		
-		my %seen = ();
+    my %seen = ();
 		foreach my $basedir (@dirs) {
 			foreach my $try (@tries) {
 				my $fulldir = "$basedir/$try/$category_name";
-				
+
 				next if $seen{$fulldir}++;
 
 				# If the cache for unavailable directories is removed,
@@ -539,26 +550,26 @@ sub __load_domain
 						unless -d $fulldir;
 
 				my $domain = __load_catalog $fulldir, $domainname;
-				next unless $domain;
-				
-				unless (defined $domain->{po_header}->{charset} &&
-						length $domain->{po_header}->{charset} &&
-						$try =~ /^(?:[a-z][a-z])
-						(?:(?:_[A-Z][A-Z])?
-						 (\.[-_A-Za-z0-9]+)?
-						 )?
-						(?:\@[-_A-Za-z0-9]+)?$/x) {
-					$domain->{po_header}->{charset} = $1;
-				}
-				
-				if (defined $domain->{po_header}->{charset}) {
-					$domain->{po_header}->{charset} = 
-						Locale::Recode->resolveAlias ($domain->{po_header}->{charset});
-				}
-				$domain->{locale_id} = $locale_lookup{$try};
-				push @$domains, $domain;
-			}
-		}
+  				next unless $domain;
+  				
+  				unless (defined $domain->{po_header}->{charset} &&
+  						length $domain->{po_header}->{charset} &&
+  						$try =~ /^(?:[a-z][a-z])
+  						(?:(?:_[A-Z][A-Z])?
+  						 (\.[-_A-Za-z0-9]+)?
+  						 )?
+  						(?:\@[-_A-Za-z0-9]+)?$/x) {
+  					$domain->{po_header}->{charset} = $1;
+  				}
+  				
+  				if (defined $domain->{po_header}->{charset}) {
+  					$domain->{po_header}->{charset} = 
+  						Locale::Recode->resolveAlias ($domain->{po_header}->{charset});
+  				}
+  				$domain->{locale_id} = $locale_lookup{$try};
+  				push @$domains, $domain;
+  		}
+    }
 		$__gettext_pp_domain_cache->{$dir}->{$cache_key}->{$category_name}->{$domainname} = $domains;
 	}
 
